@@ -1,0 +1,10 @@
+# free module #
+import pygame
+from settings import *
+
+class ObstacleSprite(pygame.sprite.Sprite):
+	def __init__(self, pos, group, surface = pygame.Surface((TILESIZE, TILESIZE))) :
+		super().__init__(group)
+		self.image = pygame.transform.scale(surface, (TILESIZE, TILESIZE))
+		self.rect = self.image.get_rect(topleft = (pos[0] * TILESIZE, pos[1] * TILESIZE))
+		self.hitbox = pygame.Rect(pos[0] * TILESIZE, pos[1] * TILESIZE, TILESIZE, TILESIZE)
