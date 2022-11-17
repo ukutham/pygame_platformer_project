@@ -9,7 +9,7 @@ if DEBUG:
 	from debug import *
 
 class PlayerSprite(pygame.sprite.Sprite):
-	def __init__(self, pos, group, obstacle_sprite, base_image, image_patron,speed = 5, force = [], masse = 80, movement_intensity = 1,):
+	def __init__(self, pos, group, base_image, image_patron,speed = 5, masse = 80, movement_intensity = 1,):
 		super().__init__(group)
 
 		self.image = pygame.Surface((TILESIZE, TILESIZE))
@@ -19,14 +19,12 @@ class PlayerSprite(pygame.sprite.Sprite):
 		self.rect = self.image.get_rect(topleft = pos)
 
 		self.hitbox = pygame.Rect(pos[0] + 15, pos[1] + 16, 23, 34)
-		self.mask_hitbox = None
+		self.mask = None
 		self.delta_hitbox = None
-
-		self.obstacle_sprite = obstacle_sprite
 
 		self.direction = pygame.math.Vector2()
 		self.speed = speed
-		self.force = force
+		self.force = []
 		self.text_force = ''
 		self.masse = masse
 		self.poid = masse * 9.8
@@ -35,7 +33,10 @@ class PlayerSprite(pygame.sprite.Sprite):
 		self.floor_friction = 0.85
 		self.wall_friction = 0.6
 
-		self.offset = pygame.math.Vector2()
+		if DEBUG:
+			self.offset = pygame.math.Vector2()
+			self.debug_force = self.force
+			self.potential_sprite_obstacle = []
 
 		self.movement_intensity = movement_intensity
 		self.camera_half_width = pygame.display.get_surface().get_size()[0] // 2
@@ -68,16 +69,17 @@ class PlayerSprite(pygame.sprite.Sprite):
 		self.in_wall_jump_time = 0.5
 		self.in_wall_jump_counter_time = self.in_wall_jump_time
 
-		self.test_new_colision = ''
-
 	def reset_wall_jump(self):
 		self.in_wall_jump = False
 		self.in_wall_jump_counter_time = self.in_wall_jump_time
 
-	def move(self):
+	def move(self, obstacle_sprite):
 		for force in self.force:
 			self.direction += force
 			self.text_force += str(force)
+
+		if DEBUG:
+			self.debug_force = self.force
 
 		self.force = []
 
@@ -96,10 +98,15 @@ class PlayerSprite(pygame.sprite.Sprite):
 		if round(self.direction.y) == 0:
 			self.direction.y = 0
 
+		#limiteur
+		if self.direction.length() >= (TILESIZE / 2) - 1 and not self.in_wall_jump:
+			self.direction = self.direction.normalize()
+			self.direction *= ( (TILESIZE / 2) - 1)
+
 		self.hitbox.x += self.direction.x
-		self.collision('horizontal')
+		self.collision('horizontal', obstacle_sprite)
 		self.hitbox.y += self.direction.y
-		self.collision('vertical')
+		self.collision('vertical', obstacle_sprite)
 
 		hitbox_with_rect_dimension = pygame.Rect( (self.hitbox.topleft[0] - self.delta_hitbox.topleft[0], self.hitbox.topleft[1] - self.delta_hitbox.topleft[1]) , self.rect.size)
 
@@ -116,7 +123,7 @@ class PlayerSprite(pygame.sprite.Sprite):
 			self.force.append(pygame.math.Vector2())
 
 			if keys[self.jump] and not self.jump_pressed_last_tick and self.on_floor:
-				self.force[-1] = pygame.math.Vector2(0, -11) * self.speed
+				self.force[-1] = pygame.math.Vector2(0, -15) * self.speed
 
 			elif keys[self.jump] and not self.jump_pressed_last_tick and self.on_left_wall:
 				self.force[-1] = pygame.math.Vector2(20, -20) * self.speed
@@ -167,43 +174,38 @@ class PlayerSprite(pygame.sprite.Sprite):
 			self.jump_pressed_last_tick = False
 
 
-	def collision(self, direction):
+	def collision(self, direction, obstacle_sprite):
 		keys = pygame.key.get_pressed()
 
 		if direction == 'horizontal' and not GOD_MODE:
 			self.on_right_wall = False
 			self.on_left_wall = False
 
-			for sprite in self.obstacle_sprite:
-				if sprite.hitbox.colliderect(self.hitbox):
-
-					sprite_mask = pygame.mask.from_surface(sprite.image)
-
-					offset = ( (self.hitbox.x - sprite.hitbox.x), (self.hitbox.y - sprite.hitbox.y) )
-
+			for sprite in obstacle_sprite:
+				if self.rect.center[0] - HITBOX_SIZE_FILTER < sprite.rect.center[0] < self.rect.center[0] + HITBOX_SIZE_FILTER and self.rect.center[1] - HITBOX_SIZE_FILTER < sprite.rect.center[1] < self.rect.center[1] + HITBOX_SIZE_FILTER:
 					if DEBUG:
-						sprite_mask_surface = sprite_mask.to_surface(setcolor = (200, 200, 0))
-						sprite_mask_surface.set_colorkey((0, 0, 0))
-						pygame.display.get_surface().blit(sprite_mask_surface, (sprite_mask_surface.get_rect().topleft[0] + sprite.rect.topleft[0] - self.offset[0], sprite_mask_surface.get_rect().topleft[1] + sprite.rect.topleft[1] - self.offset[1]))
+						self.potential_sprite_obstacle.append(sprite)
 
-					if sprite_mask.overlap(self.mask_hitbox, offset):
-						self.test_new_colision = 'horizontal'
+					if sprite.hitbox.colliderect(self.hitbox):
 
-						if self.direction.x > 0:
-							self.hitbox.right = sprite.hitbox.left
-							self.direction.x = 0
+						sprite_rects = sprite.collide_with_pixel_hitbox(self.hitbox)
 
-							if keys[self.right]:
-								self.touch_right_wall_last_tick = True
-								self.on_right_wall = True
-							
-						if self.direction.x < 0:
-							self.hitbox.left = sprite.hitbox.right
-							self.direction.x = 0
+						for sprite_rect in sprite_rects:
 
-							if keys[self.left]:
-								self.touch_left_wall_last_tick = True
-								self.on_left_wall = True
+							if sprite_rect.colliderect(self.hitbox):
+								if self.direction.x > 0:
+									self.hitbox.right = sprite_rect.left
+
+									if keys[self.right]:
+										self.touch_right_wall_last_tick = True
+										self.on_right_wall = True
+									
+								if self.direction.x < 0:
+									self.hitbox.left = sprite_rect.right
+
+									if keys[self.left]:
+										self.touch_left_wall_last_tick = True
+										self.on_left_wall = True
 
 			if not self.on_right_wall and self.touch_right_wall_last_tick:
 				self.touch_right_wall_last_tick = False
@@ -220,25 +222,30 @@ class PlayerSprite(pygame.sprite.Sprite):
 		if direction == 'vertical' and not GOD_MODE:
 			self.on_floor = False
 
-			for sprite in self.obstacle_sprite:
-				if sprite.hitbox.colliderect(self.hitbox):
+			for sprite in obstacle_sprite:
+				if self.rect.center[0] - HITBOX_SIZE_FILTER < sprite.rect.center[0] < self.rect.center[0] + HITBOX_SIZE_FILTER and self.rect.center[1] - HITBOX_SIZE_FILTER < sprite.rect.center[1] < self.rect.center[1] + HITBOX_SIZE_FILTER:
+					if DEBUG:
+						self.potential_sprite_obstacle.append(sprite)
 
-					sprite_mask = pygame.mask.from_surface(sprite.image)
+					if sprite.hitbox.colliderect(self.hitbox):
 
-					offset = ( (self.hitbox.x - sprite.hitbox.x), (self.hitbox.y - sprite.hitbox.y) )
+						sprite_rects = sprite.collide_with_pixel_hitbox(self.hitbox)
 
-					if sprite_mask.overlap(self.mask_hitbox, offset):
-						self.test_new_colision = 'vertical'
+						bottom_collision = False
+						for sprite_rect in sprite_rects:
+							if sprite_rect.colliderect(self.hitbox):
+								if self.direction.y > 0:
+									self.hitbox.bottom = sprite_rect.top
 
-						if self.direction.y > 0:
-							self.hitbox.bottom = sprite.hitbox.top
-							self.direction.y = 0
+									self.touch_floor_last_tick = True
+									self.on_floor = True
 
-							self.touch_floor_last_tick = True
-							self.on_floor = True
+								if self.direction.y < 0:
+									self.hitbox.top = sprite_rect.bottom
+									bottom_collision = True
 
-						if self.direction.y < 0:
-							self.hitbox.top = sprite.hitbox.bottom
+
+						if bottom_collision:
 							self.direction.y = 0
 
 			if not self.on_floor and self.touch_floor_last_tick:
@@ -273,48 +280,48 @@ class PlayerSprite(pygame.sprite.Sprite):
 
 	def set_hitbox(self):
 
-		self.mask_hitbox = pygame.mask.from_surface(self.image)
+		self.mask = pygame.mask.from_surface(self.image)
 
-		self.delta_hitbox = self.mask_hitbox.get_bounding_rects()
+		self.delta_hitbox = self.mask.get_bounding_rects()
 		self.delta_hitbox.sort(key=lambda r: (r.width, r.height) )
 		self.delta_hitbox = self.delta_hitbox[-1]
 
-
 		self.hitbox = pygame.Rect( (self.delta_hitbox.topleft[0] + self.rect.topleft[0], self.delta_hitbox.topleft[1] + self.rect.topleft[1]), self.delta_hitbox.size )
 
-	def update(self, delta_time):
+
+	def update(self, obstacle_sprite, delta_time):
 		self.input(delta_time)
 		self.gravity_effect()
 		self.animation()
+		self.set_hitbox()
 
+		self.move(obstacle_sprite)
+
+
+	def debug(self, offset):
 		width = self.camera_half_width - self.direction.x * self.movement_intensity
 		height = self.camera_half_height - self.direction.y * self.movement_intensity
 
 		self.offset.x = self.rect.centerx - width
 		self.offset.y = self.rect.centery - height
 
-		self.set_hitbox()
+		for sprite in self.potential_sprite_obstacle:
+			sprite.draw_pixel_hitbox(self.offset)
 
-		if DEBUG:
-			player_mask_surface = self.mask_hitbox.to_surface(setcolor = (100, 100, 0))
-			player_mask_surface.set_colorkey((0, 0, 0))
-			pygame.display.get_surface().blit(player_mask_surface, (player_mask_surface.get_rect().topleft[0] + self.rect.topleft[0] - self.offset[0], player_mask_surface.get_rect().topleft[1] + self.rect.topleft[1] - self.offset[1]))
+		self.potential_sprite_obstacle = []
+
+		pygame.draw.line(pygame.display.get_surface(), 'Red', self.rect.center - self.offset, (self.rect.center[0] + self.direction.x * DEBUG_VECTOR_SIZE, self.rect.center[1] + self.direction.y * DEBUG_VECTOR_SIZE) - self.offset)
+
+		for force in self.debug_force:
+			pygame.draw.line(pygame.display.get_surface(), 'Green', self.rect.center - self.offset, (self.rect.center[0] + force.x * DEBUG_VECTOR_SIZE * 10, self.rect.center[1] + force.y * DEBUG_VECTOR_SIZE * 10) - self.offset)
+
+		pygame.draw.polygon(pygame.display.get_surface(), 'Blue', [self.hitbox.topleft - self.offset, self.hitbox.topright - self.offset, self.hitbox.bottomright - self.offset, self.hitbox.bottomleft - self.offset], 1)
 
 
-			pygame.draw.line(pygame.display.get_surface(), 'Red', self.rect.center - self.offset, (self.rect.center[0] + self.direction.x * DEBUG_VECTOR_SIZE, self.rect.center[1] + self.direction.y * DEBUG_VECTOR_SIZE) - self.offset)
-
-			for force in self.force:
-				pygame.draw.line(pygame.display.get_surface(), 'Green', self.rect.center - self.offset, (self.rect.center[0] + force.x * DEBUG_VECTOR_SIZE * 10, self.rect.center[1] + force.y * DEBUG_VECTOR_SIZE * 10) - self.offset)
-
-			pygame.draw.polygon(pygame.display.get_surface(), 'Blue', [self.hitbox.topleft - self.offset, self.hitbox.topright - self.offset, self.hitbox.bottomright - self.offset, self.hitbox.bottomleft - self.offset], 1)
-
-		self.move()
-
-		if DEBUG:
-			debug('player_position : ', [self.rect.center[0], self.rect.center[1]])
-			debug('player_force : ', self.text_force, 30, 10)
-			self.text_force = ''
-			debug('on_floor : ', self.on_floor, 50, 10)
-			debug('on_left_wall : ', self.on_left_wall, 70, 10)
-			debug('on_right_wall : ', self.on_right_wall, 90, 10)
-			debug('new_colision_test : ', self.test_new_colision, 110, 10)
+		debug('player_position : ', [self.rect.center[0], self.rect.center[1]])
+		debug('player_force : ', self.text_force, 30, 10)
+		self.text_force = ''
+		debug('on_floor : ', self.on_floor, 50, 10)
+		debug('on_left_wall : ', self.on_left_wall, 70, 10)
+		debug('on_right_wall : ', self.on_right_wall, 90, 10)
+		debug('level_pos : ', [ self.rect.topleft[0] // TILESIZE // LEVEL_SIZE[0], self.rect.topleft[1] // TILESIZE // LEVEL_SIZE[1]], 110, 10)

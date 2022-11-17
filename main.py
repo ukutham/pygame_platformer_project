@@ -7,7 +7,7 @@ import pygame
 # my module #
 from settings import *
 
-from level import *
+from level.level_manager import LevelManager
 
 class Game():
 	def __init__(self):
@@ -20,7 +20,7 @@ class Game():
 		self.clock = pygame.time.Clock()
 		self.clock_second_convertor = 15000 / FPS
 
-		self.level = Level(f"{PATH}/level_sheet/level_1.tmx")
+		self.level_manager = LevelManager(PLAYER_LAST_POSITION)
 
 	def run(self):
 		running = True
@@ -31,7 +31,7 @@ class Game():
 
 			self.screen.fill((113, 221, 235))
 			delta_time = self.clock.tick(FPS) / self.clock_second_convertor
-			self.level.run(delta_time)
+			self.level_manager.run(delta_time)
 			pygame.display.update()
 
 		pygame.quit()

@@ -10,64 +10,57 @@ from settings import *
 
 from sprite.player import *
 from sprite.obstacle import *
+from sprite.decor import *
 
 if DEBUG:
 	from debug import *
 
 class Level():
-	def __init__(self, level):
-		self.visible_sprite = SurfaceCameraGroup()
+	def __init__(self, level, level_pos = [0, 0], display_surface = pygame.display.get_surface()):
+		self.visible_sprite = SurfaceCameraGroup(display_surface)
 		self.obstacle_sprite = pygame.sprite.Group()
-		self.movable_sprite = pygame.sprite.Group()
+		self.updatable_sprite = pygame.sprite.Group()
+		self.in_front_of_player_sprite = pygame.sprite.Group()
 
 		self.tmx_data = load_pygame(level)
 		self.surface_layers = []
 		self.surface_layers_group = {}
 
 		for layer in self.tmx_data.layers :
-			if layer.name != 'obstacle':
+			if layer.name not in ['obstacle', 'in_front_of_player']:
 				self.surface_layers.append(layer)
-				self.surface_layers_group[layer.name] = SurfaceCameraGroup()
+				self.surface_layers_group[layer.name] = pygame.sprite.Group()
 
 		self.collision_object_layer = self.tmx_data.get_layer_by_name('obstacle')
-		self.collision_object_group = pygame.sprite.Group()
+		self.in_front_of_player_layer = self.tmx_data.get_layer_by_name('in_front_of_player')
 
-		self.create_map()
+		self.create_map(level_pos)
 
-	def create_map(self):
+	def create_map(self, level_pos):
+		level_topleft = [level_pos[0] * LEVEL_SIZE[0], level_pos[1] * LEVEL_SIZE[1]]
+
 		for surface_layer in self.surface_layers:
 			for x, y, surf in surface_layer.tiles():
-				if surface_layer.name == 'player_spawn':
-					self.player = PlayerSprite((x * TILESIZE, y * TILESIZE), [self.visible_sprite, self.movable_sprite], self.obstacle_sprite, pygame.image.load(f"{PATH}/sprite_image/player/player_test.png"), pygame.image.load(f"{PATH}/sprite_image/player/patron.png"),speed = 2, movement_intensity = 1)
-				else:
-					ObstacleSprite((x, y), [self.visible_sprite], surf)
+				DecorSprite((level_topleft[0] + x,level_topleft[1] + y), [self.visible_sprite, self.surface_layers_group[surface_layer.name]], surf)
 
 		for x, y, surf in self.collision_object_layer.tiles():
-			ObstacleSprite((x, y), [self.collision_object_group,self.obstacle_sprite], surf)
+			ObstacleSprite((level_topleft[0] + x,level_topleft[1] + y), [self.obstacle_sprite], surf)
+
+		for x, y, surf in self.in_front_of_player_layer.tiles():
+			DecorSprite((level_topleft[0] + x,level_topleft[1] + y), [self.in_front_of_player_sprite], surf)
 
 
-	def run(self, delta_time):
-		if DEBUG:
-			self.visible_sprite.draw(self.player)
-			self.movable_sprite.update(delta_time)
-		else:
-			self.movable_sprite.update(delta_time)
-			self.visible_sprite.draw(self.player)
+	def run(self, player, offset, delta_time):
+		self.updatable_sprite.update(delta_time)
+		self.visible_sprite.draw(player, offset)
 
 class SurfaceCameraGroup(pygame.sprite.Group):
-	def __init__(self):
+	def __init__(self, display_surface):
 		super().__init__()
-		self.display_surface = pygame.display.get_surface()
+		self.display_surface = display_surface
 
-		self.offset = pygame.math.Vector2()
-
-	def draw(self, player):
-		width = player.camera_half_width - player.direction.x * player.movement_intensity
-		height = player.camera_half_height - player.direction.y * player.movement_intensity
-
-		self.offset.x = player.rect.centerx - width
-		self.offset.y = player.rect.centery - height
-
+	def draw(self, player, offset):
 		for sprite in self.sprites():
-			offset_position = sprite.rect.topleft - self.offset
-			self.display_surface.blit(sprite.image, offset_position)
+			if player.rect.center[0] - WIDTH < sprite.rect.center[0] < player.rect.center[0] + WIDTH and player.rect.center[1] - HEIGHT < sprite.rect.center[1] < player.rect.center[1] + HEIGHT:
+				offset_position = sprite.rect.topleft - offset
+				self.display_surface.blit(sprite.image, offset_position)
