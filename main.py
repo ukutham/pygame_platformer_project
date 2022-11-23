@@ -7,6 +7,9 @@ import pygame
 # my module #
 from settings import *
 
+if DEBUG:
+	from debug import *
+
 from level.level_manager import LevelManager
 
 class Game():
@@ -32,7 +35,12 @@ class Game():
 			self.screen.fill((113, 221, 235))
 			delta_time = self.clock.tick(FPS) / self.clock_second_convertor
 			self.level_manager.run(delta_time)
+
+			if DEBUG:
+				debug('FPS : ', self.clock.get_fps(), 130, 10)
+
 			pygame.display.update()
+
 
 		pygame.quit()
 

@@ -21,18 +21,20 @@ class Level():
 		self.obstacle_sprite = pygame.sprite.Group()
 		self.updatable_sprite = pygame.sprite.Group()
 		self.in_front_of_player_sprite = pygame.sprite.Group()
+		self.ray_cast_obstacle_sprite = pygame.sprite.Group()
 
 		self.tmx_data = load_pygame(level)
 		self.surface_layers = []
 		self.surface_layers_group = {}
 
 		for layer in self.tmx_data.layers :
-			if layer.name not in ['obstacle', 'in_front_of_player']:
+			if layer.name not in ['obstacle', 'in_front_of_player', 'ray_cast_obstacle']:
 				self.surface_layers.append(layer)
 				self.surface_layers_group[layer.name] = pygame.sprite.Group()
 
 		self.collision_object_layer = self.tmx_data.get_layer_by_name('obstacle')
 		self.in_front_of_player_layer = self.tmx_data.get_layer_by_name('in_front_of_player')
+		self.ray_cast_obstacle_layer = self.tmx_data.get_layer_by_name('ray_cast_obstacle')
 
 		self.create_map(level_pos)
 
@@ -48,6 +50,9 @@ class Level():
 
 		for x, y, surf in self.in_front_of_player_layer.tiles():
 			DecorSprite((level_topleft[0] + x,level_topleft[1] + y), [self.in_front_of_player_sprite], surf)
+
+		for x, y, surf in self.ray_cast_obstacle_layer.tiles():
+			ObstacleSprite((level_topleft[0] + x,level_topleft[1] + y), [self.ray_cast_obstacle_sprite], surf)
 
 
 	def run(self, player, offset, delta_time):

@@ -15,6 +15,7 @@ class LevelManager():
 		self.important_sprite = pygame.sprite.Group()
 		self.obstacle_sprite = pygame.sprite.Group()
 		self.in_front_of_player_sprite = pygame.sprite.Group()
+		self.ray_cast_obstacle_sprite = pygame.sprite.Group()
 
 		self.player = PlayerSprite(player_pos, [self.important_sprite], pygame.image.load(f"{PATH}/sprite_image/player/player_test.png"), pygame.image.load(f"{PATH}/sprite_image/player/patron.png"),speed = 2, movement_intensity = 1)
 		self.set_actual_level_pos()
@@ -48,16 +49,18 @@ class LevelManager():
 				self.add_level( [x, y] )
 
 		self.obstacle_sprite.empty()
+		self.in_front_of_player_sprite.empty()
+		self.ray_cast_obstacle_sprite.empty()
 
 		for level_pos, level in self.view_level.items():
 			for obstacle_sprite in level.obstacle_sprite:
 				self.obstacle_sprite.add(obstacle_sprite)
 
-		self.in_front_of_player_sprite.empty()
-
-		for level_pos, level in self.view_level.items():
 			for in_front_of_player_sprite in level.in_front_of_player_sprite:
 				self.in_front_of_player_sprite.add(in_front_of_player_sprite)
+
+			for ray_cast_obstacle_sprite in level.ray_cast_obstacle_sprite:
+				self.ray_cast_obstacle_sprite.add(ray_cast_obstacle_sprite)
 
 
 	def run(self, delta_time):
@@ -71,14 +74,14 @@ class LevelManager():
 		for sprite in self.important_sprite:
 			sprite.update(self.obstacle_sprite ,delta_time)
 
-		self.camera.draw(self.important_sprite, self.player, self.view_level, self.in_front_of_player_sprite, self.obstacle_sprite, delta_time)
+		self.camera.draw(self.important_sprite, self.player, self.view_level, self.in_front_of_player_sprite, self.obstacle_sprite, self.ray_cast_obstacle_sprite, delta_time)
 
 class LevelManagerCamera():
 	def __init__(self):
 		self.display_surface = pygame.display.get_surface()
 		self.offset = pygame.math.Vector2()
 
-	def draw(self, important_sprite, player, view_level, in_front_of_player_sprite, obstacle_sprite, delta_time):
+	def draw(self, important_sprite, player, view_level, in_front_of_player_sprite, obstacle_sprite, ray_cast_obstacle_sprite, delta_time):
 
 		width = player.camera_half_width - player.direction.x * player.movement_intensity
 		height = player.camera_half_height - player.direction.y * player.movement_intensity
@@ -96,53 +99,50 @@ class LevelManagerCamera():
 			if player.rect.center[0] - WIDTH < sprite.rect.center[0] < player.rect.center[0] + WIDTH and player.rect.center[1] - HEIGHT < sprite.rect.center[1] < player.rect.center[1] + HEIGHT:
 				self.display_surface.blit( sprite.image, sprite.rect.topleft - self.offset )
 
-		self.visibility_mask(obstacle_sprite, player)
+		self.visibility_mask(obstacle_sprite, ray_cast_obstacle_sprite, player)
 
 		if DEBUG:
 			for sprite in important_sprite:
 				sprite.debug(self.offset)
 
-	def visibility_mask(self, obstacle_sprite, player):
-		#visibility_mask = pygame.Surface((WIDTH, HEIGHT))
-		#self.display_surface.blit(visibility_mask, [0, 0])
-		"""ray_cast_points = []
-
-		for sprite in obstacle_sprite:
-			if player.rect.center[0] - WIDTH/2 < sprite.rect.center[0] < player.rect.center[0] + WIDTH/2 and player.rect.center[1] - HEIGHT/2 < sprite.rect.center[1] < player.rect.center[1] + HEIGHT/2:
-				ray_cast_points.append( (player.rect.center, sprite.hitbox.topleft) )
-				ray_cast_points.append( (player.rect.center, sprite.hitbox.bottomleft) )
-				ray_cast_points.append( (player.rect.center, sprite.hitbox.topright) )
-				ray_cast_points.append( (player.rect.center, sprite.hitbox.bottomright) )
-
-		clip_in_ray_casts = []
-		for ray_cast in ray_cast_points:
-			for sprite in obstacle_sprite:
-				if sprite.hitbox.clipline(ray_cast[0], ray_cast[1]):
-					if ray_cast not in clip_in_ray_casts:
-						clip_in_ray_casts.append(ray_cast)
-						break
-
-		for ray_cast in clip_in_ray_casts:
-			index = ray_cast_points.index(ray_cast)
-			del ray_cast_points[index]
-
-		for ray_cast in ray_cast_points:
-			pygame.draw.line(self.display_surface, 'Pink', ray_cast[0] - self.offset, ray_cast[1] - self.offset, 1)"""
-
+	def visibility_mask(self, obstacle_sprite, ray_cast_obstacle_sprite, player):
 		ray_casts = []
 
-		for sprite in obstacle_sprite:
+		for sprite in ray_cast_obstacle_sprite:
 			if player.rect.center[0] - WIDTH/2 < sprite.rect.center[0] < player.rect.center[0] + WIDTH/2 and player.rect.center[1] - HEIGHT/2 < sprite.rect.center[1] < player.rect.center[1] + HEIGHT/2:
-				ray_casts.append( pygame.math.Vector2(sprite.hitbox.topleft) )
-				print(ray_casts[-1].lenght())
-				ray_casts.append( pygame.math.Vector2(sprite.hitbox.bottomleft) )
-				print(ray_casts[-1].lenght())
-				ray_casts.append( pygame.math.Vector2(sprite.hitbox.topright) )
-				print(ray_casts[-1].lenght())
-				ray_casts.append( pygame.math.Vector2(sprite.hitbox.bottomright) )
-				print(ray_casts[-1].lenght())
+				ray_casts.append( pygame.math.Vector2( sprite.hitbox.topleft[0] - player.hitbox.centerx, sprite.hitbox.topleft[1] - player.hitbox.centery ) )
+
+				ray_casts.append( pygame.math.Vector2( sprite.hitbox.bottomleft[0] - player.hitbox.centerx, sprite.hitbox.bottomleft[1] - player.hitbox.centery ) )
+
+				ray_casts.append( pygame.math.Vector2( sprite.hitbox.topright[0] - player.hitbox.centerx, sprite.hitbox.topright[1] - player.hitbox.centery ) )
+
+				ray_casts.append( pygame.math.Vector2( sprite.hitbox.bottomright[0] - player.hitbox.centerx, sprite.hitbox.bottomright[1] - player.hitbox.centery ) )
+
+		n_constant_ray = 32
+		for i in range(0, n_constant_ray):
+			ray_casts.append( pygame.math.Vector2( 0, -WIDTH ).rotate(i * (360/n_constant_ray) ) )
 
 
 		for ray_cast in ray_casts:
-			pygame.draw.line(self.display_surface, 'Pink', player.rect.center - self.offset, ray_cast - self.offset, 1)
+			group_sprite_test = [sprite for sprite in obstacle_sprite if sprite.hitbox.clipline( player.hitbox.center, (ray_cast.x + player.hitbox.centerx,  ray_cast.y + player.hitbox.centery) )]
+
+			for i in range(1,  int(ray_cast.length()), TILESIZE):
+				new_ray_cast = ray_cast.copy()
+				new_ray_cast.scale_to_length(i)
+
+				cliped_line = [sprite for sprite in group_sprite_test if sprite.hitbox.clipline( player.hitbox.center ,(new_ray_cast.x + player.hitbox.centerx,  new_ray_cast.y + player.hitbox.centery) ) ]
+
+				if cliped_line:
+					clip = cliped_line[0].hitbox.clipline(player.hitbox.center ,(new_ray_cast.x + player.hitbox.centerx,  new_ray_cast.y + player.hitbox.centery))
+
+					new_ray_cast.update( ( clip[0][0] - player.hitbox.centerx, clip[0][1] - player.hitbox.centery ) )
+
+					ray_casts[ray_casts.index(ray_cast)] = new_ray_cast
+					break
+
+
+		zero_deg_vector = pygame.math.Vector2( 0, -1 )
+		ray_casts = sorted( ray_casts, key= lambda ray_cast: ray_cast.angle_to(zero_deg_vector) )
+
+		pygame.draw.polygon(self.display_surface, 'Pink', [ (ray_cast.x + player.hitbox.centerx,  ray_cast.y + player.hitbox.centery) - self.offset for ray_cast in ray_casts], 1)
 
