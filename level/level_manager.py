@@ -124,25 +124,23 @@ class LevelManagerCamera():
 
 
 		for ray_cast in ray_casts:
-			group_sprite_test = [sprite for sprite in obstacle_sprite if sprite.hitbox.clipline( player.hitbox.center, (ray_cast.x + player.hitbox.centerx,  ray_cast.y + player.hitbox.centery) )]
+			cliped_lines = []
+			for sprite in obstacle_sprite:
+				clip = sprite.hitbox.clipline( player.hitbox.center, (ray_cast.x + player.hitbox.centerx,  ray_cast.y + player.hitbox.centery) )
+				if clip:
+					cliped_lines.append(clip[0])
+					cliped_lines.append(clip[1])
 
-			for i in range(1,  int(ray_cast.length()), TILESIZE):
-				new_ray_cast = ray_cast.copy()
-				new_ray_cast.scale_to_length(i)
 
-				cliped_line = [sprite for sprite in group_sprite_test if sprite.hitbox.clipline( player.hitbox.center ,(new_ray_cast.x + player.hitbox.centerx,  new_ray_cast.y + player.hitbox.centery) ) ]
-
-				if cliped_line:
-					clip = cliped_line[0].hitbox.clipline(player.hitbox.center ,(new_ray_cast.x + player.hitbox.centerx,  new_ray_cast.y + player.hitbox.centery))
-
-					new_ray_cast.update( ( clip[0][0] - player.hitbox.centerx, clip[0][1] - player.hitbox.centery ) )
-
-					ray_casts[ray_casts.index(ray_cast)] = new_ray_cast
-					break
-
+			if cliped_lines:
+				cliped_lines = sorted(cliped_lines, key=lambda clip: pygame.math.Vector2( (clip[0] - player.hitbox.centerx, clip[1] - player.hitbox.centery) ).length() )
+				ray_casts[ray_casts.index(ray_cast)].update( (cliped_lines[0][0] - player.hitbox.centerx, cliped_lines[0][1] - player.hitbox.centery) )
 
 		zero_deg_vector = pygame.math.Vector2( 0, -1 )
 		ray_casts = sorted( ray_casts, key= lambda ray_cast: ray_cast.angle_to(zero_deg_vector) )
+
+		"""for ray_cast in ray_casts:
+			pygame.draw.line(self.display_surface, 'Pink', player.hitbox.center - self.offset, (ray_cast.x + player.hitbox.centerx,  ray_cast.y + player.hitbox.centery) - self.offset )"""
 
 		pygame.draw.polygon(self.display_surface, 'Pink', [ (ray_cast.x + player.hitbox.centerx,  ray_cast.y + player.hitbox.centery) - self.offset for ray_cast in ray_casts], 1)
 
